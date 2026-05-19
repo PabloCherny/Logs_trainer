@@ -1,2 +1,2 @@
 # Logs_trainer
-Big gide of logs reading
+**Logs Trainer** — interactive CLI log analysis guide with tests.
