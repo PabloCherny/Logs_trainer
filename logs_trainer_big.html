@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Как читать логи — полный гайд + диагностика по источникам + тесты</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-gradient-start: #f8fafc;
+            --bg-gradient-end: #e2e8f0;
+            --container-bg: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #334155;
+            --card-bg: #f1f5f9;
+            --card-shadow: 0 8px 20px rgba(0,0,0,0.05);
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+            --table-header: #1e293b;
+            --table-row-hover: #f1f5f9;
+            --quiz-bg: #fefce8;
+            --quiz-border: #fde047;
+            --question-bg: white;
+            --option-bg: #f1f5f9;
+            --option-hover: #e2e8f0;
+            --footer-text: #475569;
+            --badge: #d9f99d;
+            --command-bg: #e6f7ff;
+            --case-bg: #f0fdf4;
+            --case-border: #bbf7d0;
+        }
+
+        body.dark {
+            --bg-gradient-start: #0f172a;
+            --bg-gradient-end: #1e293b;
+            --container-bg: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --card-bg: #334155;
+            --card-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            --code-bg: #0f172a;
+            --code-text: #a5f3c3;
+            --table-header: #0f172a;
+            --table-row-hover: #475569;
+            --quiz-bg: #2d3a3a;
+            --quiz-border: #fbbf24;
+            --question-bg: #334155;
+            --option-bg: #1e293b;
+            --option-hover: #475569;
+            --footer-text: #94a3b8;
+            --badge: #2d3a3a;
+            --command-bg: #1e2a3a;
+            --case-bg: #1a3a2a;
+            --case-border: #2e7d5e;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+            background: linear-gradient(145deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            color: var(--text-primary);
+            padding: 2rem 1rem;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--container-bg);
+            border-radius: 2rem;
+            box-shadow: 0 25px 45px -12px rgba(0,0,0,0.25);
+            overflow: hidden;
+            padding: 2rem;
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(135deg, #0f172a, #f97316);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            border-left: 6px solid #f97316;
+            padding-left: 1rem;
+        }
+
+        .theme-toggle {
+            background: var(--card-bg);
+            border: 1px solid var(--text-secondary);
+            padding: 0.5rem 1.2rem;
+            border-radius: 2rem;
+            cursor: pointer;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            margin: 1.8rem 0 1rem;
+            border-left: 5px solid #f97316;
+            padding-left: 1rem;
+        }
+
+        h3 {
+            font-size: 1.3rem;
+            margin: 1rem 0 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin: 1rem 0;
+            padding: 1rem;
+            background: var(--card-bg);
+            border-radius: 1.5rem;
+            align-items: center;
+        }
+
+        .filter-btn {
+            background: var(--code-bg);
+            color: var(--code-text);
+            border: none;
+            padding: 0.4rem 1rem;
+            border-radius: 2rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: 0.2s;
+        }
+
+        .filter-btn.active {
+            background: #f97316;
+            color: white;
+        }
+
+        .card-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 1.5rem;
+            padding: 1.3rem;
+            box-shadow: var(--card-shadow);
+            flex: 1 1 300px;
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            border-left: 3px solid #f97316;
+            padding-left: 0.6rem;
+        }
+
+        .command-block {
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 0.8rem;
+            border-radius: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card-bg);
+            border-radius: 1rem;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--bg-gradient-end);
+        }
+
+        th {
+            background-color: var(--table-header);
+            color: white;
+        }
+
+        tr:hover {
+            background-color: var(--table-row-hover);
+        }
+
+        .badge-skill {
+            display: inline-block;
+            background: var(--badge);
+            border-radius: 20px;
+            padding: 0.2rem 0.7rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .case-block {
+            background: var(--case-bg);
+            border-left: 4px solid #22c55e;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0.8rem;
+        }
+
+        .case-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .decision-tree {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 1rem;
+            margin: 1rem 0;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .quiz-section {
+            background: var(--quiz-bg);
+            border-radius: 1.5rem;
+            padding: 1.8rem;
+            margin-top: 2rem;
+            border: 1px solid var(--quiz-border);
+        }
+
+        .question {
+            background: var(--question-bg);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 1.2rem;
+            border: 1px solid var(--quiz-border);
+        }
+
+        .options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin: 0.8rem 0;
+        }
+
+        .option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--option-bg);
+            padding: 0.4rem 1rem;
+            border-radius: 40px;
+            cursor: pointer;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        button {
+            background: #2c3e50;
+            color: white;
+            border: none;
+            padding: 0.6rem 1.5rem;
+            border-radius: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+
+        button:hover {
+            background: #1e2a3e;
+            transform: scale(0.97);
+        }
+
+        .result-summary {
+            margin-top: 1rem;
+            background: var(--table-header);
+            color: white;
+            padding: 1rem;
+            border-radius: 1rem;
+            text-align: center;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 2rem;
+            font-size: 0.8rem;
+            color: var(--footer-text);
+        }
+
+        hr {
+            margin: 1rem 0;
+            border-color: var(--quiz-border);
+        }
+
+        .correct-feedback {
+            background: #2e7d5e30;
+            border-left: 4px solid #2ecc71;
+            padding: 0.5rem;
+            border-radius: 0.6rem;
+        }
+
+        .incorrect-feedback {
+            background: #e74c3c30;
+            border-left: 4px solid #e74c3c;
+            padding: 0.5rem;
+            border-radius: 0.6rem;
+        }
+
+        @media (max-width: 760px) {
+            .container { padding: 1rem; }
+            h1 { font-size: 1.6rem; }
+            .filter-bar { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header-row">
+        <h1>📜 Как читать логи, когда их слишком много</h1>
+        <button class="theme-toggle" id="themeToggle">🌙 Тёмная тема</button>
+    </div>
+    <p style="margin-bottom: 1rem;">⭐ <strong>Расширенный гайд по материалу Habr</strong> + диагностика по источникам ошибок, карта принятия решений, реальные кейсы и тесты.</p>
+
+    <!-- Фильтр по категориям -->
+    <div class="filter-bar" id="filterBar">
+        <span style="font-weight: bold;">🔍 Фильтр по источнику:</span>
+        <button class="filter-btn active" data-filter="all">📌 Все</button>
+        <button class="filter-btn" data-filter="kernel">🐧 Ядро Linux</button>
+        <button class="filter-btn" data-filter="postgres">🗄️ PostgreSQL</button>
+        <button class="filter-btn" data-filter="mysql">📁 MySQL</button>
+        <button class="filter-btn" data-filter="nginx">🌐 Nginx</button>
+        <button class="filter-btn" data-filter="app">🖥️ Приложение</button>
+        <button class="filter-btn" data-filter="security">🔒 Безопасность</button>
+        <button class="filter-btn" data-filter="disk">💾 Диск/ФС</button>
+        <button class="filter-btn" data-filter="network">🌐 Сеть</button>
+    </div>
+
+    <!-- ============ 1. ТЕОРИЯ: уровни логирования ============ -->
+    <h2>📖 1. Основы: уровни логирования и стратегия поиска</h2>
+    <div class="card-grid">
+        <div class="card">
+            <div class="card-title">🎚️ Уровни важности (от INFO до FATAL)</div>
+            <ul style="margin-left: 1.2rem;">
+                <li><strong>INFO</strong> – штатная работа</li>
+                <li><strong>DEBUG</strong> – детали для разработчика</li>
+                <li><strong>WARN</strong> – возможная проблема</li>
+                <li><strong>ERROR</strong> – ошибка, но сервис жив</li>
+                <li><strong>FATAL/CRITICAL</strong> – критический сбой компонента</li>
+                <li><strong>TRACE</strong> – слишком подробно (осторожно на проде)</li>
+            </ul>
+        </div>
+        <div class="card">
+            <div class="card-title">🧠 С чего начинать разбор (правило 5 минут)</div>
+            <ol style="margin-left: 1.2rem;">
+                <li>Когда началась деградация?</li>
+                <li>Где стала заметна? (nginx / app / БД)</li>
+                <li>Какой компонент ближе к симптому?</li>
+                <li>Какие журналы относятся к цепочке?</li>
+                <li>Идём от симптома: nginx → app → БД → очередь → ОС</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- ============ 2. ДИАГНОСТИКА ПО ИСТОЧНИКАМ ============ -->
+    <h2>🎯 2. Диагностика по источникам ошибок</h2>
+    <div class="source-diagnostics" id="sourceDiagnostics">
+        <!-- Блоки будут фильтроваться через JS -->
+        <div class="card" data-source="kernel">
+            <div class="card-title">🐧 Ядро Linux / OOM Killer / segfault</div>
+            <div class="command-block">
+# Просмотр сообщений ядра за последний час
+journalctl -k --since "1 hour ago" --no-pager
+
+# Фильтр по OOM Killer и убитым процессам
+journalctl -k | grep -Ei 'oom|killed process|out of memory'
+
+# Поиск segfault (ошибки сегментации)
+journalctl -k | grep -i 'segfault'
+
+# dmesg для аппаратных ошибок
+dmesg | tail -50 | grep -i 'error\|fail'
+            </div>
+        </div>
+
+        <div class="card" data-source="postgres">
+            <div class="card-title">🗄️ PostgreSQL: медленные запросы, блокировки, ошибки</div>
+            <div class="command-block">
+# Поиск ошибок и FATAL в логах
+grep -i 'ERROR\|FATAL\|PANIC' /var/log/postgresql/postgresql-*.log | tail -50
+
+# Поиск медленных запросов
+grep 'duration' /var/log/postgresql/postgresql-*.log | awk '{print $NF, $0}' | sort -rn | head -20
+
+# Активные блокировки из psql
+sudo -u postgres psql -c "SELECT * FROM pg_locks WHERE NOT granted;"
+
+# Активные транзакции
+sudo -u postgres psql -c "SELECT * FROM pg_stat_activity WHERE state = 'idle in transaction';"
+            </div>
+        </div>
+
+        <div class="card" data-source="mysql">
+            <div class="card-title">📁 MySQL: deadlock, timeout, медленные запросы</div>
+            <div class="command-block">
+# Ошибки MySQL
+grep -i 'error\|deadlock\|timeout' /var/log/mysql/error.log
+
+# Медленные запросы (если включён slow-query log)
+mysqldumpslow /var/log/mysql/mysql-slow.log | head -10
+
+# Текущие процессы (в MySQL)
+mysql -e "SHOW FULL PROCESSLIST;"
+
+# Информация о блокировках
+mysql -e "SHOW ENGINE INNODB STATUS\G" | grep -A20 'LATEST DETECTED DEADLOCK'
+            </div>
+        </div>
+
+        <div class="card" data-source="nginx">
+            <div class="card-title">🌐 Nginx: 5xx, таймауты, прокси</div>
+            <div class="command-block">
+# Ошибки nginx (5xx)
+awk '$9 >= 500' /var/log/nginx/access.log | cut -d' ' -f1,7,9 | sort | uniq -c | sort -nr | head -20
+
+# Таймауты в error.log
+grep -i 'timeout\|upstream timed out' /var/log/nginx/error.log
+
+# Проверка конфигурации
+nginx -t
+
+# Статистика по status кодам
+awk '{print $9}' /var/log/nginx/access.log | sort | uniq -c | sort -nr
+            </div>
+        </div>
+
+        <div class="card" data-source="app">
+            <div class="card-title">🖥️ Приложение (Python/Node.js): stack trace, exception</div>
+            <div class="command-block">
+# journalctl для systemd-сервиса
+journalctl -u myapp -n 200 --no-pager
+
+# Поиск stack trace с контекстом (50 строк после)
+grep -A50 'Traceback\|Exception\|Error' /var/log/myapp/app.log | head -200
+
+# Поиск по request ID
+grep -Rni 'request_id=abc123' /var/log/myapp/
+            </div>
+        </div>
+
+        <div class="card" data-source="security">
+            <div class="card-title">🔒 Безопасность: SSH, аутентификация, брутфорс</div>
+            <div class="command-block">
+# Неудачные попытки входа по SSH
+grep 'Failed password' /var/log/auth.log | tail -50
+
+# Топ IP с неудачными входами
+grep 'Failed password' /var/log/auth.log | awk '{print $(NF-3)}' | sort | uniq -c | sort -nr | head -10
+
+# Подозрительная активность (sudo)
+grep 'sudo.*COMMAND' /var/log/auth.log | tail -30
+
+# Windows: неудачные логины (Event ID 4625)
+Get-WinEvent -FilterHashtable @{LogName='Security'; ID=4625; StartTime=(Get-Date).AddHours(-1)} | Format-List
+            </div>
+        </div>
+
+        <div class="card" data-source="disk">
+            <div class="card-title">💾 Диск и файловая система: место, I/O ошибки</div>
+            <div class="command-block">
+# Свободное место
+df -h
+
+# I/O ошибки в ядре
+journalctl -k | grep -i 'i/o error\|no space left\|read-only'
+
+# inode usage (Linux)
+df -i
+
+# Windows: место на дисках
+Get-PSDrive -PSProvider FileSystem | Select Name, Used, Free
+            </div>
+        </div>
+
+        <div class="card" data-source="network">
+            <div class="card-title">🌐 Сеть: таймауты, сбросы, DNS</div>
+            <div class="command-block">
+# Открытые порты и соединения
+ss -tulpn
+
+# DNS проблемы в логах
+grep -i 'dns\|resolve' /var/log/syslog | tail -30
+
+# Сбросы соединений (TCP RST)
+journalctl -k | grep -i 'reset'
+
+# Windows: сбросить TCP стек
+netsh int ip reset
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ 3. КАРТА ДИАГНОСТИКИ (DECISION TREE) ============ -->
+    <h2>🗺️ 3. Карта диагностики: от симптома к источнику</h2>
+    <div class="decision-tree">
+        <pre style="font-family: monospace; white-space: pre-wrap; background: transparent; color: inherit;">
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        ОБНАРУЖЕНА ПРОБЛЕМА                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                        ┌───────────────────────┐
+                        │   Какой симптом?       │
+                        └───────────────────────┘
+                                    │
+            ┌──────────┬───────────┼───────────┬──────────┐
+            ▼          ▼           ▼           ▼          ▼
+     ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+     │Медленно  │ │Ошибки    │ │Сервис не │ │Неудачный │ │Диск полон│
+     │работает  │ │5xx/50x   │ │отвечает  │ │вход      │ │или I/O   │
+     └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
+          │            │            │            │            │
+          ▼            ▼            ▼            ▼            ▼
+     ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+     │Проверить:│ │Логи      │ │systemctl │ │auth.log  │ │df -h     │
+     │CPU/IO/net│ │nginx +   │ │status    │ │Failed    │ │iostat    │
+     │dstat     │ │app       │ │ss -tulpn │ │password  │ │journalctl│
+     │iostat    │ │          │ │          │ │          │ │-k        │
+     └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
+        </pre>
+    </div>
+
+    <!-- ============ 4. РЕАЛЬНЫЕ КЕЙСЫ ============ -->
+    <h2>🔍 4. Реальные кейсы: разбор ситуаций</h2>
+    
+    <div class="case-block">
+        <div class="case-title">📌 Кейс 1: Приложение падает с OOM Killer</div>
+        <div><strong>Симптом:</strong> Процесс неожиданно завершается, в логах "Killed process".</div>
+        <div><strong>Диагностика:</strong></div>
+        <div class="command-block">
+# 1. Проверяем, был ли OOM Killer
+journalctl -k | grep -i 'oom\|killed process'
+
+# 2. Смотрим память до/после
+free -h
+
+# 3. Кто потреблял память? (если есть логи до падения)
+cat /var/log/myapp/app.log | grep -B20 'Killed'
+        </div>
+        <div><strong>Решение:</strong> Увеличить RAM, настроить swap, ограничить память для приложения.</div>
+    </div>
+
+    <div class="case-block">
+        <div class="case-title">📌 Кейс 2: PostgreSQL не отвечает на запросы</div>
+        <div><strong>Симптом:</strong> Таймауты соединений, запросы висят.</div>
+        <div><strong>Диагностика:</strong></div>
+        <div class="command-block">
+# 1. Активные транзакции
+sudo -u postgres psql -c "SELECT pid, state, query FROM pg_stat_activity WHERE state = 'idle in transaction';"
+
+# 2. Поиск блокировок
+sudo -u postgres psql -c "SELECT * FROM pg_locks WHERE NOT granted;"
+
+# 3. Медленные запросы из логов
+grep 'duration' /var/log/postgresql/postgresql-*.log | tail -20
+        </div>
+        <div><strong>Решение:</strong> Завершить зависшие транзакции, оптимизировать запросы, настроить параметры БД.</div>
+    </div>
+
+    <div class="case-block">
+        <div class="case-title">📌 Кейс 3: Nginx возвращает 502 Bad Gateway</div>
+        <div><strong>Симптом:</strong> Пользователи видят 502 ошибку.</div>
+        <div><strong>Диагностика:</strong></div>
+        <div class="command-block">
+# 1. Логи nginx
+grep '502' /var/log/nginx/access.log | tail -20
+
+# 2. Логи апстрима (приложение/BE)
+journalctl -u myapp --since "5 minutes ago" --no-pager | tail -30
+
+# 3. Проверить, жив ли апстрим
+curl -I http://localhost:8000/health
+        </div>
+        <div><strong>Решение:</strong> Перезапустить апстрим, проверить конфиги nginx, увеличить таймауты.</div>
+    </div>
+
+    <div class="case-block">
+        <div class="case-title">📌 Кейс 4: Атака брутфорса по SSH</div>
+        <div><strong>Симптом:</strong> Много неудачных логинов, сервер тормозит.</div>
+        <div><strong>Диагностика:</strong></div>
+        <div class="command-block">
+# 1. Анализ auth.log
+grep 'Failed password' /var/log/auth.log | awk '{print $(NF-3)}' | sort | uniq -c | sort -nr | head -10
+
+# 2. Блокировка IP
+sudo fail2ban-client status sshd
+        </div>
+        <div><strong>Решение:</strong> Настроить fail2ban, сменить SSH порт, ограничить доступ по ключам.</div>
+    </div>
+
+    <!-- ============ 5. ИНСТРУМЕНТЫ И ЛАЙФХАКИ ============ -->
+    <h2>🛠️ 5. Лайфхаки и инструменты</h2>
+    <div class="card-grid">
+        <div class="card">
+            <div class="card-title">🎯 Ограничивайте выборку до чтения</div>
+            <div class="command-block">journalctl --since, --until, -u, -p, _PID</div>
+            <div class="card-title">🔁 Считайте повторы</div>
+            <div class="command-block">grep 'error' app.log | sort | uniq -c | sort -nr | head -20</div>
+            <div class="card-title">📖 Контекст (-A, -B, -C)</div>
+            <div class="command-block">grep -A20 -B10 'panic' app.log</div>
+        </div>
+        <div class="card">
+            <div class="card-title">🔄 Проверяйте ротацию (gz, старые экземпляры)</div>
+            <div class="command-block">zgrep -i 'error' /var/log/myapp/*.gz</div>
+            <div class="card-title">🧠 Сохраняйте ход расследования</div>
+            <div class="badge-skill">Время симптома</div>
+            <div class="badge-skill">Записывайте гипотезы</div>
+            <div class="card-title">🔑 Добавляйте request ID / trace ID</div>
+            <div class="command-block">grep -Rni 'request_id=abc123' /var/log/</div>
+        </div>
+    </div>
+
+    <h3>📊 Сравнение инструментов централизованного сбора</h3>
+    <div class="table-responsive">
+        <table>
+            <thead><tr><th>Инструмент</th><th>Сложность</th><th>Поиск</th><th>Алерты</th><th>Бесплатно</th></tr></thead>
+            <tbody>
+                <tr><td>Loki + Grafana</td><td>Средняя</td><td>Метки</td><td>Да</td><td>Да</td></tr>
+                <tr><td>ELK Stack</td><td>Высокая</td><td>Полнотекстовый</td><td>Да</td><td>Да</td></tr>
+                <tr><td>SigNoz</td><td>Средняя</td><td>Да</td><td>Да</td><td>Да</td></tr>
+                <tr><td>Graylog</td><td>Средняя</td><td>Да</td><td>Да</td><td>Да</td></tr>
+                <tr><td>Splunk</td><td>Низкая</td><td>Мощный</td><td>Да</td><td>500MB/день</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ============ ТЕСТЫ (15 вопросов, включая БД, ядро, безопасность) ============ -->
+    <div class="quiz-section">
+        <h2>📝 Тест: проверьте свои навыки чтения логов</h2>
+        <div id="quizContainer"></div>
+        <div class="btn-group">
+            <button id="checkQuizBtn">✅ Проверить ответы</button>
+            <button id="resetQuizBtn">🔄 Пройти заново</button>
+            <button id="exportQuizBtn">📎 Экспорт результатов (JSON)</button>
+        </div>
+        <div id="quizResult" class="result-summary" style="display: none;"></div>
+    </div>
+
+    <footer>
+        📚 Расширенный гайд по статье Habr «Как читать логи, когда их слишком много» (2026). Добавлены: диагностика по источникам, decision tree, реальные кейсы.
+    </footer>
+</div>
+
+<script>
+    const quizQuestions = [
+        { text: "Какой уровень логирования в статье рекомендуется использовать на проде с осторожностью, так как он сильно нагружает диск?", options: ["INFO", "DEBUG", "TRACE", "WARN"], correct: 2, explanation: "TRACE пишет очень подробно (вызовы, параметры) — быстро заполняет диск." },
+        { text: "Какой инструмент в Linux с systemd позволяет фильтровать логи по сервису, времени и уровню важности без чтения всего файла?", options: ["grep", "tail", "journalctl", "awk"], correct: 2, explanation: "journalctl умеет -u (unit), --since/--until, -p priority." },
+        { text: "Как в Linux с помощью journalctl посмотреть сообщения ядра (kernel) за последний час?", options: ["journalctl -k --since '1 hour ago'", "dmesg -k", "journalctl -u kernel", "cat /var/log/kernel.log"], correct: 0, explanation: "journalctl -k (--dmesg) показывает кольцевой буфер ядра." },
+        { text: "В Windows какой командлет PowerShell обеспечивает фильтрацию на стороне службы?", options: ["Get-WinEvent", "Read-EventLog", "Get-Log", "Select-Event"], correct: 0, explanation: "Get-WinEvent с FilterHashtable фильтрует до передачи данных." },
+        { text: "Что означает ключ -A20 в команде grep -A20 -B10 'error' app.log?", options: ["Показать 20 строк до", "Показать 20 строк после", "Показать 20 номеров", "Игнорировать регистр"], correct: 1, explanation: "-A (after) строки после, -B (before) до." },
+        { text: "Какая команда покажет топ IP с неудачными входами в SSH?", options: ["grep 'Failed' /var/log/auth.log | sort", "grep 'Failed password' auth.log | awk '{print $(NF-3)}' | sort | uniq -c | sort -nr", "cat auth.log | cut -d' ' -f1", "lastb | head"], correct: 1, explanation: "Стандартная цепочка для анализа брутфорса." },
+        { text: "Как найти в PostgreSQL активные блокировки (locks)?", options: ["SELECT * FROM pg_stat_activity", "SELECT * FROM pg_locks WHERE NOT granted", "SHOW LOCKS", "ps aux | grep postgres"], correct: 1, explanation: "pg_locks с условием NOT granted показывает ожидающие блокировки." },
+        { text: "Как в Nginx access.log найти все запросы, вернувшие 5xx ошибку?", options: ["grep '5xx' access.log", "awk '$9 >= 500' access.log", "tail -f access.log", "cut -d' ' -f9 access.log"], correct: 1, explanation: "awk позволяет фильтровать по 9-му полю (status code)." },
+        { text: "Как проверить, был ли срабатывание OOM Killer в Linux?", options: ["dmesg | grep OOM", "journalctl -k | grep -i 'oom\|killed process'", "cat /var/log/oom.log", "free -h"], correct: 1, explanation: "journalctl -k показывает сообщения ядра, включая OOM Killer." },
+        { text: "Какая команда покажет самые медленные запросы в MySQL?", options: ["mysqldumpslow", "grep slow", "mysqladmin status", "SHOW SLOW QUERIES"], correct: 0, explanation: "mysqldumpslow анализирует slow-query log." },
+        { text: "Как в Windows PowerShell найти Event ID 4625 (неудачный логин) за последний час?", options: ["Get-EventLog Security | Where {$_.EventID -eq 4625}", "Get-WinEvent -FilterHashtable @{LogName='Security'; ID=4625; StartTime=(Get-Date).AddHours(-1)}", "wevtutil qe Security /c:100", "Get-Event -Log Security -ID 4625"], correct: 1, explanation: "Get-WinEvent с FilterHashtable — эффективная фильтрация по времени и ID." },
+        { text: "Какой инструмент из статьи позволяет делать SQL-запросы к логам и объединять несколько файлов в временную линию?", options: ["grep", "awk", "lnav", "jq"], correct: 2, explanation: "lnav — консольный лог-вьювер, поддерживает SQL и timeline." },
+        { text: "Как в Linux посмотреть топ-20 самых частых IP в access.log nginx?", options: ["awk '{print $1}' access.log | sort | uniq -c | sort -nr | head -20", "cat access.log | cut -d' ' -f1 | head -20", "grep -o '[0-9.]*' access.log | head -20", "tail -20 access.log"], correct: 0, explanation: "Классическая цепочка: вырезать IP, подсчитать уникальные, отсортировать." },
+        { text: "Какая команда покажет информацию о дисковых I/O операциях в реальном времени?", options: ["df -h", "du -sh", "iostat -x 1 5", "lsblk"], correct: 2, explanation: "iostat показывает I/O нагрузки на диски." },
+        { text: "Что нужно сделать в первую очередь при диагностике проблемы в микросервисной архитектуре?", options: ["Читать весь лог за сутки", "Искать слово 'error' по всем сервисам", "Ограничить выборку временем и компонентом (рамка поиска)", "Перезапустить все сервисы"], correct: 2, explanation: "Сначала рамка поиска (время, источник, цепочка), потом анализировать." }
+    ];
+
+    function renderQuiz() {
+        const container = document.getElementById('quizContainer');
+        container.innerHTML = '';
+        quizQuestions.forEach((q, idx) => {
+            const qDiv = document.createElement('div');
+            qDiv.className = 'question';
+            qDiv.innerHTML = `<p><strong>${idx+1}. ${q.text}</strong></p><div class="options" id="opts-${idx}"></div><div id="fb-${idx}" class="quiz-feedback"></div>`;
+            container.appendChild(qDiv);
+            const optsDiv = qDiv.querySelector('.options');
+            q.options.forEach((opt, optIdx) => {
+                const label = document.createElement('label');
+                label.className = 'option';
+                label.innerHTML = `<input type="radio" name="q${idx}" value="${optIdx}"> ${opt}`;
+                optsDiv.appendChild(label);
+            });
+        });
+    }
+
+    function checkQuiz() {
+        let score = 0;
+        for (let i = 0; i < quizQuestions.length; i++) {
+            const selected = document.querySelector(`input[name="q${i}"]:checked`);
+            const fbDiv = document.getElementById(`fb-${i}`);
+            if (selected && parseInt(selected.value) === quizQuestions[i].correct) {
+                score++;
+                fbDiv.innerHTML = `<div class="correct-feedback">✅ Верно. ${quizQuestions[i].explanation}</div>`;
+            } else {
+                const correctAns = quizQuestions[i].options[quizQuestions[i].correct];
+                fbDiv.innerHTML = `<div class="incorrect-feedback">❌ Неверно. Правильно: «${correctAns}». ${quizQuestions[i].explanation}</div>`;
+            }
+        }
+        const total = quizQuestions.length;
+        const percent = Math.round(score/total*100);
+        const resultDiv = document.getElementById('quizResult');
+        resultDiv.style.display = 'block';
+        let msg = (percent === 100) ? "🎉 Отлично! Вы — мастер чтения логов." : (percent >= 70 ? "👍 Хорошо, но стоит повторить команды контекста и инструменты." : "📘 Рекомендуем перечитать разделы про journalctl и Get-WinEvent.");
+        resultDiv.innerHTML = `🎯 Результат: ${score}/${total} (${percent}%). ${msg}`;
+        window.lastScore = score; window.lastTotal = total; window.lastPercent = percent;
+    }
+
+    function resetQuiz() {
+        document.querySelectorAll('#quizContainer input[type="radio"]').forEach(r => r.checked = false);
+        for (let i = 0; i < quizQuestions.length; i++) {
+            const fb = document.getElementById(`fb-${i}`);
+            if (fb) fb.innerHTML = '';
+        }
+        document.getElementById('quizResult').style.display = 'none';
+    }
+
+    function exportResults() {
+        if (window.lastScore === undefined) {
+            alert("Сначала проверьте тест (кнопка «Проверить ответы»)!");
+            return;
+        }
+        const exportData = {
+            date: new Date().toISOString(),
+            score: window.lastScore,
+            total: window.lastTotal,
+            percent: window.lastPercent,
+            answers: quizQuestions.map((q, i) => {
+                const selected = document.querySelector(`input[name="q${i}"]:checked`);
+                return { question: q.text, selected: selected ? q.options[parseInt(selected.value)] : "не выбран", correct: q.options[q.correct] };
+            })
+        };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: "application/json"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `logs_quiz_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        alert("Экспорт выполнен. JSON сохранён.");
+    }
+
+    // Фильтр по источникам
+    function initFilter() {
+        const filterBtns = document.querySelectorAll('.filter-btn');
+        const cards = document.querySelectorAll('#sourceDiagnostics .card');
+        
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filter = btn.getAttribute('data-filter');
+                filterBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                if (filter === 'all') {
+                    cards.forEach(card => card.style.display = '');
+                } else {
+                    cards.forEach(card => {
+                        const source = card.getAttribute('data-source');
+                        card.style.display = source === filter ? '' : 'none';
+                    });
+                }
+            });
+        });
+    }
+
+    // Тёмная тема
+    function initTheme() {
+        const isDark = localStorage.getItem('darkTheme') === 'true';
+        if (isDark) document.body.classList.add('dark');
+        const btn = document.getElementById('themeToggle');
+        btn.innerText = isDark ? '☀️ Светлая тема' : '🌙 Тёмная тема';
+        btn.onclick = () => {
+            const dark = document.body.classList.toggle('dark');
+            localStorage.setItem('darkTheme', dark);
+            btn.innerText = dark ? '☀️ Светлая тема' : '🌙 Тёмная тема';
+        };
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        renderQuiz();
+        initFilter();
+        initTheme();
+        document.getElementById('checkQuizBtn').addEventListener('click', checkQuiz);
+        document.getElementById('resetQuizBtn').addEventListener('click', resetQuiz);
+        document.getElementById('exportQuizBtn').addEventListener('click', exportResults);
+    });
+</script>
+</body>
+</html>
