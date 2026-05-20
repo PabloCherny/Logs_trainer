@@ -808,6 +808,46 @@ sudo fail2ban-client status sshd
         document.getElementById('checkQuizBtn').addEventListener('click', checkQuiz);
         document.getElementById('resetQuizBtn').addEventListener('click', resetQuiz);
         document.getElementById('exportQuizBtn').addEventListener('click', exportResults);
+            function showDetailedStats(score, total, percent, categoryStats) {
+        const resultDiv = document.getElementById('quizResult');
+        
+        let categoriesHtml = '<div style="margin-top: 1rem; text-align: left; border-top: 1px solid #f97316; padding-top: 1rem;"><strong>📊 Детальная статистика по темам:</strong><ul style="margin-top: 0.5rem; list-style: none; padding-left: 0;">';
+        
+        for (const [category, data] of Object.entries(categoryStats)) {
+            const percentCat = data.total === 0 ? 0 : Math.round((data.correct / data.total) * 100);
+            const icon = percentCat >= 80 ? '✅' : (percentCat >= 50 ? '⚠️' : '❌');
+            categoriesHtml += `<li style="margin-bottom: 0.5rem;">${icon} <strong>${category}</strong>: ${data.correct}/${data.total} правильных (${percentCat}%)</li>`;
+        }
+        categoriesHtml += '</ul></div>';
+        
+        let recommendations = '<div style="margin-top: 1rem; text-align: left; border-top: 1px solid #f97316; padding-top: 1rem;"><strong>📚 Рекомендации для изучения:</strong><ul style="margin-top: 0.5rem; list-style: none; padding-left: 0;">';
+        
+        for (const [category, data] of Object.entries(categoryStats)) {
+            const percentCat = data.total === 0 ? 0 : Math.round((data.correct / data.total) * 100);
+            if (percentCat < 70 && data.total > 0) {
+                recommendations += `<li style="margin-bottom: 0.5rem;">🔹 <strong>${category}</strong>: перечитайте раздел «Диагностика по источникам ошибок» (${data.correct}/${data.total} верных). Обратите внимание на типичные команды и симптомы.</li>`;
+            }
+        }
+        
+        if (recommendations === '<div style="margin-top: 1rem; text-align: left; border-top: 1px solid #f97316; padding-top: 1rem;"><strong>📚 Рекомендации для изучения:</strong><ul style="margin-top: 0.5rem; list-style: none; padding-left: 0;">') {
+            recommendations += '<li>🎉 Отличный результат! Вы хорошо ориентируетесь в теме. Можете углубиться в инструменты централизованного сбора логов (Loki, ELK).</li>';
+        }
+        recommendations += '</ul></div>';
+        
+        let message = '';
+        if (percent === 100) {
+            message = '🎉 Отлично! Вы — мастер чтения логов.';
+        } else if (percent >= 80) {
+            message = '🌟 Очень хорошо! Вы уверенно работаете с логами.';
+        } else if (percent >= 60) {
+            message = '👍 Неплохо, но есть куда расти. Обратите внимание на рекомендации ниже.';
+        } else {
+            message = '📘 Стоит повторить материал. Рекомендуем перечитать разделы про journalctl, grep и Get-WinEvent.';
+        }
+        
+        resultDiv.innerHTML = `<div style="font-size: 1.1rem; font-weight: bold; margin-bottom: 0.5rem;">🎯 Результат: ${score}/${total} (${percent}%). ${message}</div>${categoriesHtml}${recommendations}`;
+        resultDiv.style.display = 'block';
+    }
     });
 </script>
 </body>
